@@ -1,24 +1,24 @@
-@import url('https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,300;0,400;0,500;0,600;0,700;1,300;1,400&family=Montserrat:wght@200;300;400;500;600;700;800&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,300;0,400;0,500;0,600;0,700;1,300;1,400;1,500;1,600;1,700&family=Montserrat:wght@100;200;300;400;500;600;700;800;900&display=swap');
 
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
 
-/* ── CSS Variables ─────────────────────────────────────── */
+/* ── Daraja Design Tokens ───────────────────────────────── */
 :root {
-  --navy: #050505;
-  --gold: #C5A059;
-  --gold-rgb: 197, 160, 89;
-  --surface: #0E0E0E;
-  --text-primary: #FFFFFF;
-  --border: rgba(255, 255, 255, 0.08);
+  --daraja-charcoal: #050505;
+  --daraja-surface: #0E0E0E;
+  --daraja-surface-2: #141414;
+  --daraja-gold: #C5A059;
+  --daraja-gold-dark: #856936;
+  --daraja-gold-rgb: 197, 160, 89;
+  --daraja-border: rgba(255, 255, 255, 0.08);
+  --daraja-text-muted: rgba(255, 255, 255, 0.4);
   --transition: 0.3s ease;
 }
 
 /* ── Base ───────────────────────────────────────────────── */
-*, *::before, *::after {
-  box-sizing: border-box;
-}
+*, *::before, *::after { box-sizing: border-box; }
 
 html {
   scroll-behavior: smooth;
@@ -27,8 +27,8 @@ html {
 
 body {
   margin: 0;
-  background-color: var(--navy);
-  color: var(--text-primary);
+  background-color: var(--daraja-charcoal);
+  color: #ffffff;
   font-family: 'Montserrat', system-ui, sans-serif;
   font-weight: 300;
   -webkit-font-smoothing: antialiased;
@@ -36,29 +36,13 @@ body {
   overflow-x: hidden;
 }
 
-img, video {
-  display: block;
-  max-width: 100%;
-}
+/* RTL support */
+[dir="rtl"] { text-align: right; }
+[dir="rtl"] .icon-mirror { transform: scaleX(-1); }
 
-a {
-  color: inherit;
-  text-decoration: none;
-}
-
-button, input, select, textarea {
-  font-family: inherit;
-}
-
-/* ── Typography ─────────────────────────────────────────── */
-.font-serif {
-  font-family: 'Cormorant Garamond', Georgia, serif;
-}
-
-/* Golden ratio type scale */
-h1 { font-size: clamp(2rem, 5vw, 4.5rem); }
-h2 { font-size: clamp(1.5rem, 3vw, 2.75rem); }
-h3 { font-size: clamp(1.2rem, 2vw, 1.75rem); }
+img, video { display: block; max-width: 100%; }
+a { color: inherit; text-decoration: none; }
+button, input, select, textarea { font-family: inherit; }
 
 /* ── Scrollbar ──────────────────────────────────────────── */
 ::-webkit-scrollbar { width: 3px; height: 3px; }
@@ -67,86 +51,65 @@ h3 { font-size: clamp(1.2rem, 2vw, 1.75rem); }
 ::-webkit-scrollbar-thumb:hover { background: rgba(197,160,89,0.7); }
 
 /* ── Selection ──────────────────────────────────────────── */
-::selection {
-  background: rgba(197,160,89,0.25);
-  color: #fff;
-}
+::selection { background: rgba(197,160,89,0.25); color: #fff; }
 
 /* ── Focus ──────────────────────────────────────────────── */
-:focus-visible {
-  outline: 1px solid rgba(197,160,89,0.5);
-  outline-offset: 2px;
-}
+:focus-visible { outline: 1px solid rgba(197,160,89,0.5); outline-offset: 2px; }
 
-/* ── Utilities ──────────────────────────────────────────── */
+/* ── Tailwind Aliases (blueprint class names) ───────────── */
 @layer utilities {
-  .text-gold { color: #C5A059; }
-  .bg-navy { background-color: #050505; }
-  .bg-surface { background-color: #0E0E0E; }
-  .border-gold { border-color: #C5A059; }
+  .bg-daraja-charcoal  { background-color: var(--daraja-charcoal); }
+  .bg-daraja-surface   { background-color: var(--daraja-surface); }
+  .bg-daraja-surface-2 { background-color: var(--daraja-surface-2); }
+  .text-daraja-gold    { color: var(--daraja-gold); }
+  .bg-daraja-gold      { background-color: var(--daraja-gold); }
+  .border-daraja-gold  { border-color: var(--daraja-gold); }
+  .border-daraja-border { border-color: var(--daraja-border); }
+  .text-daraja-text-muted { color: var(--daraja-text-muted); }
 
-  .line-clamp-2 {
-    display: -webkit-box;
-    -webkit-line-clamp: 2;
-    -webkit-box-orient: vertical;
-    overflow: hidden;
-  }
-  .line-clamp-3 {
-    display: -webkit-box;
-    -webkit-line-clamp: 3;
-    -webkit-box-orient: vertical;
-    overflow: hidden;
+  .mono-text {
+    font-family: 'Montserrat', monospace;
+    letter-spacing: 0.1em;
   }
 
-  .tabular-nums {
-    font-variant-numeric: tabular-nums;
+  .luxury-card {
+    background-color: var(--daraja-surface);
+    border: 1px solid var(--daraja-border);
+    transition: border-color 0.3s ease;
   }
 
-  /* Golden ratio width helpers */
-  .w-golden { width: 61.8%; }
-  .w-golden-minor { width: 38.2%; }
+  .glass {
+    background: rgba(255,255,255,0.03);
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+  }
+
+  .gold-shimmer {
+    background: linear-gradient(135deg, #C5A059 0%, #F0D080 50%, #C5A059 100%);
+    background-size: 200% 200%;
+    animation: shimmer 3s ease infinite;
+  }
 }
+
+/* ── Golden Ratio Typography ────────────────────────────── */
+h1 { font-size: clamp(2rem, 5vw, 4.5rem); }
+h2 { font-size: clamp(1.5rem, 3vw, 2.75rem); }
+h3 { font-size: clamp(1.2rem, 2vw, 1.75rem); }
 
 /* ── Animations ─────────────────────────────────────────── */
-@layer utilities {
-  .animate-fade-in {
-    animation: fadeIn 0.5s ease-in-out both;
-  }
-  .animate-slide-up {
-    animation: slideUp 0.4s ease-out both;
-  }
+@keyframes shimmer {
+  0%   { background-position: 0% 50%; }
+  50%  { background-position: 100% 50%; }
+  100% { background-position: 0% 50%; }
 }
 
-@keyframes fadeIn {
-  from { opacity: 0; }
-  to { opacity: 1; }
+@keyframes ticker {
+  0%   { transform: translateX(0); }
+  100% { transform: translateX(-50%); }
 }
 
-@keyframes slideUp {
-  from { transform: translateY(16px); opacity: 0; }
-  to { transform: translateY(0); opacity: 1; }
-}
+.animate-ticker { animation: ticker 30s linear infinite; }
 
-/* ── RTL Support ────────────────────────────────────────── */
-[dir="rtl"] {
-  text-align: right;
-}
-[dir="rtl"] .font-serif {
-  letter-spacing: 0;
-}
-[dir="rtl"] .icon-mirror {
-  transform: scaleX(-1);
-}
-
-/* ── PWA / Safe Areas ───────────────────────────────────── */
-@supports (padding: env(safe-area-inset-bottom)) {
-  .pb-safe {
-    padding-bottom: env(safe-area-inset-bottom);
-  }
-}
-
-/* ── Backdrop blur fallback ─────────────────────────────── */
-@supports not (backdrop-filter: blur(10px)) {
-  .backdrop-blur { background-color: rgba(5,5,5,0.97); }
-  .backdrop-blur-sm { background-color: rgba(5,5,5,0.92); }
-}
+/* ── Scrollbar thin ─────────────────────────────────────── */
+.scrollbar-thin::-webkit-scrollbar { width: 2px; }
+.scrollbar-thin::-webkit-scrollbar-thumb { background: rgba(197,160,89,0.3); }

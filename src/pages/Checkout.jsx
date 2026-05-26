@@ -1,335 +1,295 @@
 import React, { useState, useEffect } from 'react';
-import { useNavigate, Link } from 'react-router-dom';
+import { motion, AnimatePresence } from 'motion/react';
+import { ShieldCheck, Truck, ArrowRight, Lock, MapPin, CheckCircle2, ChevronRight, ShoppingBag, CreditCard } from 'lucide-react';
+import { Link, useNavigate } from 'react-router-dom';
 import { Order } from '../api/entities';
 
-const OPAY_MERCHANT_ID = import.meta.env.VITE_OPAY_MERCHANT_ID || '';
-const OPAY_PUBLIC_KEY = import.meta.env.VITE_OPAY_PUBLIC_KEY || '';
+// ─── OPay payment initialiser ────────────────────────────────────────────────
+async function initOPayPayment({ amount, email, name, reference }) {
+  try {
+    const res = await fetch('/api/opay/initialize', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        amount: Math.round(amount * 100), // kobo
+        email,
+        name,
+        reference,
+        callback_url: window.location.origin + '/orders'
+      })
+    });
+    const data = await res.json();
+    if (data?.data?.checkoutUrl) {
+      window.location.href = data.data.checkoutUrl;
+      return true;
+    }
+    return false;
+  } catch (err) {
+    console.error('OPay init error', err);
+    return false;
+  }
+}
 
 export default function Checkout() {
+  const [step, setStep] = useState(1);
+  const [cartItems, setCartItems] = useState([]);
+  const [isProcessing, setIsProcessing] = useState(false);
   const navigate = useNavigate();
-  const [items, setItems] = useState([]);
-  const [step, setStep] = useState(1); // 1=details, 2=payment, 3=success
-  const [processing, setProcessing] = useState(false);
-  const [orderId, setOrderId] = useState(null);
-  const [form, setForm] = useState({
-    full_name: '', email: '', phone: '',
-    address: '', city: '', state: '', country: 'Nigeria',
+  const [formData, setFormData] = useState({
+    name: '',
+    email: '',
+    address: '',
+    city: '',
+    postalCode: '',
+    encryptionKey: `IDENTITY_TX_${Math.floor(Math.random() * 9000) + 1000}`
   });
 
   useEffect(() => {
-    const cart = JSON.parse(localStorage.getItem('hd_cart') || '[]');
-    if (cart.length === 0) navigate('/shop');
-    setItems(cart);
+    try {
+      const saved = JSON.parse(localStorage.getItem('hd_cart') || '[]');
+      setCartItems(saved);
+      if (saved.length === 0) navigate('/shop');
+    } catch { navigate('/shop'); }
   }, []);
 
-  const total = items.reduce((s, i) => s + i.price * i.quantity, 0);
-  const deliveryFee = total >= 100000 ? 0 : 5000;
-  const grandTotal = total + deliveryFee;
+  const subtotal = cartItems.reduce((acc, item) => acc + (item.price * (item.qty || 1)), 0);
+  const tax = subtotal * 0.075;
+  const total = subtotal + tax;
 
-  const generateRef = () => `HD-${Date.now()}-${Math.random().toString(36).slice(2, 7).toUpperCase()}`;
-
-  const createOrder = async () => {
-    const ref = generateRef();
-    const order = await Order.create({
-      items,
-      total_amount: grandTotal,
-      status: 'pending',
-      payment_status: 'pending',
-      payment_reference: ref,
-      shipping_address: `${form.address}, ${form.city}, ${form.state}, ${form.country}`,
-      notes: `Contact: ${form.phone}`,
-    });
-    return { order, ref };
+  const handleChange = (e) => {
+    const { name, value } = e.target;
+    setFormData(prev => ({ ...prev, [name]: value }));
   };
 
-  const handleOPayCheckout = async () => {
-    setProcessing(true);
+  const handleFinalize = async () => {
+    if (!formData.email || !formData.name) {
+      alert('Identity fields are required.');
+      return;
+    }
+    setIsProcessing(true);
+
     try {
-      const { order, ref } = await createOrder();
-      setOrderId(order.id);
+      // 1. Create order record
+      const order = await Order.create({
+        items: cartItems,
+        total_amount: total,
+        status: 'Pending',
+        payment_status: 'pending',
+        payment_reference: formData.encryptionKey,
+        shipping_address: formData,
+      });
 
-      // OPay inline checkout
-      const opayConfig = {
-        merchantId: OPAY_MERCHANT_ID,
-        reference: ref,
-        amount: grandTotal * 100, // in kobo
-        currency: 'NGN',
-        customerName: form.full_name,
-        customerEmail: form.email,
-        customerPhone: form.phone,
-        callbackUrl: `${window.location.origin}/checkout/verify`,
-        onSuccess: async (response) => {
-          // Update order on success
-          await Order.update(order.id, {
-            payment_status: 'paid',
-            status: 'confirmed',
-            payment_reference: response.reference || ref,
-          });
-          localStorage.removeItem('hd_cart');
-          window.dispatchEvent(new Event('cartUpdated'));
+      // 2. Launch OPay checkout
+      const opayOk = await initOPayPayment({
+        amount: total,
+        email: formData.email,
+        name: formData.name,
+        reference: formData.encryptionKey,
+      });
 
-          // Trigger push notification
-          if ('Notification' in window && Notification.permission === 'granted') {
-            new Notification('Order Confirmed ✦', {
-              body: `Your order of ₦${grandTotal.toLocaleString()} has been confirmed. House of Daraja`,
-              icon: '/hd-icon.png',
-              badge: '/hd-icon.png',
-            });
-          }
-
-          setStep(3);
-        },
-        onFailure: (err) => {
-          Order.update(order.id, { payment_status: 'failed' });
-          alert('Payment failed. Please try again.');
-          setProcessing(false);
-        },
-        onClose: () => {
-          setProcessing(false);
-        },
-      };
-
-      // Load OPay SDK and initiate
-      if (window.OPay) {
-        window.OPay.initialize(opayConfig);
-      } else {
-        // Fallback: redirect to OPay hosted page
-        const params = new URLSearchParams({
-          merchantId: OPAY_MERCHANT_ID,
-          reference: ref,
-          amount: grandTotal * 100,
-          currency: 'NGN',
-          name: form.full_name,
-          email: form.email,
-          phone: form.phone,
-          callbackUrl: encodeURIComponent(`${window.location.origin}/checkout/verify?ref=${ref}&orderId=${order.id}`),
-        });
-        window.location.href = `https://cashier.opayweb.com/checkout?${params}`;
+      if (!opayOk) {
+        // Fallback: mark as pending and redirect
+        alert('Acquisition logged. Payment gateway unavailable — your order is saved.');
+        localStorage.removeItem('hd_cart');
+        navigate('/orders');
       }
     } catch (err) {
-      alert('Could not initialize payment. Please try again.');
-      setProcessing(false);
+      console.error(err);
+      alert('Ledger commit failed. Please try again.');
+    } finally {
+      setIsProcessing(false);
     }
   };
 
-  if (step === 3) {
-    return (
-      <div className="min-h-screen bg-[#050505] flex items-center justify-center px-6">
-        <div className="max-w-md w-full text-center">
-          <div className="text-[#C5A059] text-7xl mb-8">✦</div>
-          <h1 className="text-4xl font-serif text-white font-light mb-4">Order Confirmed</h1>
-          <p className="text-white/50 mb-4">
-            Your acquisition has been received. Our atelier is preparing your order.
-          </p>
-          <div className="bg-[#C5A059]/10 border border-[#C5A059]/20 p-4 mb-8">
-            <div className="text-[#C5A059] text-xs uppercase tracking-[0.3em] mb-1">Order Total</div>
-            <div className="text-white font-serif text-3xl">₦{grandTotal.toLocaleString()}</div>
-          </div>
-          <p className="text-white/30 text-sm mb-8">
-            A confirmation has been sent to {form.email}. Track your order in your profile.
-          </p>
-          <div className="flex gap-4 justify-center">
-            <Link to="/orders" className="bg-[#C5A059] text-black px-8 py-3 text-xs uppercase tracking-[0.3em] font-bold hover:bg-white transition-colors">
-              Track Order
-            </Link>
-            <Link to="/" className="border border-white/20 text-white/60 px-8 py-3 text-xs uppercase tracking-[0.3em] hover:border-white/60 transition-colors">
-              Continue Shopping
-            </Link>
-          </div>
-        </div>
-      </div>
-    );
-  }
-
   return (
-    <div className="min-h-screen bg-[#050505]">
-      <div className="max-w-6xl mx-auto px-6 md:px-16 py-12">
-        {/* Header */}
-        <div className="flex items-center gap-3 mb-4">
-          <Link to="/" className="flex items-center gap-2">
-            <div className="w-8 h-8 bg-[#C5A059] flex items-center justify-center">
-              <span className="text-black font-serif font-bold text-sm">HD</span>
+    <motion.div
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      className="min-h-screen bg-daraja-charcoal pt-32 pb-24 px-6 md:px-12"
+    >
+      <div className="max-w-6xl mx-auto grid grid-cols-1 lg:grid-cols-12 gap-16">
+
+        {/* ── LEFT: CHECKOUT LOGIC (62%) ────────────────── */}
+        <div className="lg:col-span-8 space-y-16">
+          <header className="space-y-4">
+            <h1 className="text-5xl md:text-7xl font-serif italic text-white tracking-tighter">
+              Acquisition <span className="text-daraja-gold not-italic">Logic</span>
+            </h1>
+            <div className="flex items-center gap-4 text-daraja-text-muted text-[10px] mono-text uppercase tracking-widest">
+              <span className={step >= 1 ? 'text-daraja-gold' : ''}>01 IDENTITY</span>
+              <ChevronRight className="w-3 h-3" />
+              <span className={step >= 2 ? 'text-daraja-gold' : ''}>02 COORDINATES</span>
+              <ChevronRight className="w-3 h-3" />
+              <span className={step >= 3 ? 'text-daraja-gold' : ''}>03 HANDSHAKE</span>
             </div>
-          </Link>
-          <div className="w-px h-6 bg-white/10" />
-          <span className="text-white/40 text-xs uppercase tracking-[0.3em]">Checkout</span>
-        </div>
+          </header>
 
-        {/* Progress */}
-        <div className="flex items-center gap-3 mb-12 mt-6">
-          {[
-            { n: 1, label: 'Details' },
-            { n: 2, label: 'Payment' },
-          ].map(({ n, label }) => (
-            <React.Fragment key={n}>
-              <div className="flex items-center gap-2">
-                <div className={`w-6 h-6 flex items-center justify-center text-xs font-bold ${
-                  step >= n ? 'bg-[#C5A059] text-black' : 'bg-white/10 text-white/40'
-                }`}>{n}</div>
-                <span className={`text-xs uppercase tracking-[0.2em] ${step >= n ? 'text-white' : 'text-white/30'}`}>{label}</span>
-              </div>
-              {n < 2 && <div className={`flex-1 max-w-12 h-px ${step > n ? 'bg-[#C5A059]' : 'bg-white/10'}`} />}
-            </React.Fragment>
-          ))}
-        </div>
-
-        <div className="grid grid-cols-1 lg:grid-cols-5 gap-12">
-          {/* Left — form 62% */}
-          <div className="lg:col-span-3">
+          <AnimatePresence mode="wait">
+            {/* STEP 1 — Identity */}
             {step === 1 && (
-              <form onSubmit={(e) => { e.preventDefault(); setStep(2); }}>
-                <h2 className="text-2xl font-serif text-white font-light mb-8">Delivery Details</h2>
-                <div className="space-y-5">
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
-                    <div>
-                      <label className="text-white/40 text-xs uppercase tracking-[0.3em] block mb-2">Full Name *</label>
-                      <input type="text" value={form.full_name} onChange={e => setForm(f => ({ ...f, full_name: e.target.value }))}
-                        required placeholder="Your full name"
-                        className="w-full bg-[#0E0E0E] border border-white/10 text-white px-4 py-3 text-sm focus:outline-none focus:border-[#C5A059] placeholder-white/20" />
-                    </div>
-                    <div>
-                      <label className="text-white/40 text-xs uppercase tracking-[0.3em] block mb-2">Phone *</label>
-                      <input type="tel" value={form.phone} onChange={e => setForm(f => ({ ...f, phone: e.target.value }))}
-                        required placeholder="+234 xxx xxxx xxxx"
-                        className="w-full bg-[#0E0E0E] border border-white/10 text-white px-4 py-3 text-sm focus:outline-none focus:border-[#C5A059] placeholder-white/20" />
-                    </div>
+              <motion.div key="s1" initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -20 }} className="space-y-8">
+                <div className="luxury-card p-12 space-y-8">
+                  <div className="flex items-center gap-3 text-daraja-gold mono-text text-[10px]">
+                    <Lock className="w-4 h-4" /> <span>ENCRYPTED_IDENTITY_FORM</span>
                   </div>
-                  <div>
-                    <label className="text-white/40 text-xs uppercase tracking-[0.3em] block mb-2">Email *</label>
-                    <input type="email" value={form.email} onChange={e => setForm(f => ({ ...f, email: e.target.value }))}
-                      required placeholder="your@email.com"
-                      className="w-full bg-[#0E0E0E] border border-white/10 text-white px-4 py-3 text-sm focus:outline-none focus:border-[#C5A059] placeholder-white/20" />
-                  </div>
-                  <div>
-                    <label className="text-white/40 text-xs uppercase tracking-[0.3em] block mb-2">Delivery Address *</label>
-                    <input type="text" value={form.address} onChange={e => setForm(f => ({ ...f, address: e.target.value }))}
-                      required placeholder="Street address"
-                      className="w-full bg-[#0E0E0E] border border-white/10 text-white px-4 py-3 text-sm focus:outline-none focus:border-[#C5A059] placeholder-white/20" />
-                  </div>
-                  <div className="grid grid-cols-2 gap-5">
-                    <div>
-                      <label className="text-white/40 text-xs uppercase tracking-[0.3em] block mb-2">City *</label>
-                      <input type="text" value={form.city} onChange={e => setForm(f => ({ ...f, city: e.target.value }))}
-                        required placeholder="City"
-                        className="w-full bg-[#0E0E0E] border border-white/10 text-white px-4 py-3 text-sm focus:outline-none focus:border-[#C5A059] placeholder-white/20" />
-                    </div>
-                    <div>
-                      <label className="text-white/40 text-xs uppercase tracking-[0.3em] block mb-2">State *</label>
-                      <input type="text" value={form.state} onChange={e => setForm(f => ({ ...f, state: e.target.value }))}
-                        required placeholder="State"
-                        className="w-full bg-[#0E0E0E] border border-white/10 text-white px-4 py-3 text-sm focus:outline-none focus:border-[#C5A059] placeholder-white/20" />
-                    </div>
-                  </div>
-                </div>
-                <button type="submit" className="w-[61.8%] bg-[#C5A059] text-black py-4 text-sm uppercase tracking-[0.3em] font-bold hover:bg-white transition-colors mt-8">
-                  Continue to Payment →
-                </button>
-              </form>
-            )}
-
-            {step === 2 && (
-              <div>
-                <h2 className="text-2xl font-serif text-white font-light mb-8">Payment</h2>
-
-                {/* OPay badge */}
-                <div className="border border-[#C5A059]/20 p-6 mb-8 bg-[#C5A059]/5">
-                  <div className="flex items-center gap-4 mb-4">
-                    <div className="w-12 h-12 bg-[#C5A059] flex items-center justify-center text-black font-bold text-xs">
-                      OPay
-                    </div>
-                    <div>
-                      <div className="text-white font-medium text-sm">OPay Secure Checkout</div>
-                      <div className="text-white/40 text-xs mt-0.5">Bank transfer, card, USSD, wallets</div>
-                    </div>
-                    <div className="ml-auto flex items-center gap-1">
-                      <div className="w-2 h-2 bg-green-400 rounded-full" />
-                      <span className="text-green-400 text-xs">Secured</span>
-                    </div>
-                  </div>
-                  <div className="space-y-2 text-xs text-white/40">
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
                     {[
-                      '256-bit SSL encryption',
-                      'Bank-grade security by OPay',
-                      'Instant confirmation',
-                      'Supports OPay wallet, cards, bank transfer, USSD',
+                      { label: 'Full_Name', name: 'name', type: 'text', placeholder: 'RESIDENT_ID_NAME' },
+                      { label: 'Neural_Email', name: 'email', type: 'email', placeholder: 'archive@daraja.io' }
                     ].map(f => (
-                      <div key={f} className="flex items-center gap-2">
-                        <span className="text-[#C5A059]">✓</span> {f}
+                      <div key={f.name} className="space-y-3">
+                        <label className="text-[10px] mono-text text-daraja-text-muted uppercase">{f.label}</label>
+                        <input
+                          type={f.type} name={f.name} value={formData[f.name]} onChange={handleChange}
+                          placeholder={f.placeholder}
+                          className="w-full bg-daraja-charcoal border border-daraja-border p-5 text-white font-mono text-sm focus:border-daraja-gold outline-none"
+                        />
                       </div>
                     ))}
                   </div>
                 </div>
-
-                {/* Order summary recap */}
-                <div className="space-y-3 mb-8 p-6 bg-[#0E0E0E] border border-white/5">
-                  <div className="text-white/40 text-xs uppercase tracking-[0.3em] mb-4">Delivery to</div>
-                  <div className="text-white/70 text-sm">{form.full_name}</div>
-                  <div className="text-white/50 text-sm">{form.address}, {form.city}, {form.state}</div>
-                  <div className="text-white/50 text-sm">{form.phone}</div>
-                </div>
-
-                <div className="flex gap-4">
-                  <button onClick={handleOPayCheckout} disabled={processing}
-                    className="flex-1 bg-[#C5A059] text-black py-4 text-sm uppercase tracking-[0.3em] font-bold hover:bg-white transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                  >
-                    {processing ? 'Initializing OPay...' : `Pay ₦${grandTotal.toLocaleString()}`}
-                  </button>
-                  <button onClick={() => setStep(1)} className="px-6 border border-white/20 text-white/50 text-xs uppercase tracking-[0.2em] hover:border-white/50 transition-colors">
-                    ← Back
-                  </button>
-                </div>
-              </div>
+                <button onClick={() => setStep(2)} className="w-full py-8 bg-daraja-gold text-daraja-charcoal font-black uppercase tracking-[0.5em] text-[10px] hover:bg-white transition-all flex items-center justify-center gap-3">
+                  VERIFY_IDENTITY <ArrowRight className="w-4 h-4" />
+                </button>
+              </motion.div>
             )}
-          </div>
 
-          {/* Right — order summary 38% */}
-          <div className="lg:col-span-2">
-            <div className="sticky top-24">
-              <h3 className="text-white/40 text-xs uppercase tracking-[0.3em] mb-6">Order Summary</h3>
-              <div className="space-y-4 mb-6">
-                {items.map((item, i) => (
-                  <div key={i} className="flex gap-3">
-                    {item.image && (
-                      <div className="relative">
-                        <img src={item.image} alt={item.name} className="w-16 h-16 object-cover" />
-                        <span className="absolute -top-2 -right-2 bg-[#C5A059] text-black text-[9px] w-5 h-5 rounded-full flex items-center justify-center font-bold">
-                          {item.quantity}
-                        </span>
-                      </div>
-                    )}
-                    <div className="flex-1">
-                      <div className="text-white text-sm leading-tight">{item.name}</div>
-                      {item.size && <div className="text-white/40 text-xs">Size: {item.size}</div>}
-                    </div>
-                    <div className="text-white/70 text-sm whitespace-nowrap">₦{(item.price * item.quantity).toLocaleString()}</div>
+            {/* STEP 2 — Coordinates */}
+            {step === 2 && (
+              <motion.div key="s2" initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -20 }} className="space-y-8">
+                <div className="luxury-card p-12 space-y-8">
+                  <div className="flex items-center gap-3 text-daraja-gold mono-text text-[10px]">
+                    <MapPin className="w-4 h-4" /> <span>GEOLOCATION_COORDINATES</span>
                   </div>
-                ))}
-              </div>
-
-              <div className="border-t border-white/10 pt-4 space-y-3 mb-6">
-                <div className="flex justify-between text-sm">
-                  <span className="text-white/40">Subtotal</span>
-                  <span className="text-white/70">₦{total.toLocaleString()}</span>
+                  <div className="space-y-8">
+                    <div className="space-y-3">
+                      <label className="text-[10px] mono-text text-daraja-text-muted uppercase">Delivery_Address</label>
+                      <textarea
+                        name="address" value={formData.address} onChange={handleChange}
+                        placeholder="SECURE_NODE_LOCATION"
+                        className="w-full bg-daraja-charcoal border border-daraja-border p-5 text-white font-mono text-sm focus:border-daraja-gold outline-none min-h-[120px]"
+                      />
+                    </div>
+                    <div className="grid grid-cols-2 gap-8">
+                      {[
+                        { label: 'Primary_City', name: 'city' },
+                        { label: 'Postal_Node', name: 'postalCode' }
+                      ].map(f => (
+                        <div key={f.name} className="space-y-3">
+                          <label className="text-[10px] mono-text text-daraja-text-muted uppercase">{f.label}</label>
+                          <input
+                            type="text" name={f.name} value={formData[f.name]} onChange={handleChange}
+                            className="w-full bg-daraja-charcoal border border-daraja-border p-5 text-white font-mono text-sm focus:border-daraja-gold outline-none"
+                          />
+                        </div>
+                      ))}
+                    </div>
+                  </div>
                 </div>
-                <div className="flex justify-between text-sm">
-                  <span className="text-white/40">Delivery</span>
-                  <span className={deliveryFee === 0 ? 'text-green-400 text-sm' : 'text-white/70 text-sm'}>
-                    {deliveryFee === 0 ? 'Free' : `₦${deliveryFee.toLocaleString()}`}
-                  </span>
+                <div className="flex gap-4">
+                  <button onClick={() => setStep(1)} className="flex-1 py-8 border border-daraja-border text-white mono-text text-[10px] hover:bg-white/5">BACK</button>
+                  <button onClick={() => setStep(3)} className="flex-[2] py-8 bg-daraja-gold text-daraja-charcoal font-black mono-text text-[10px] hover:bg-white">COMMIT_COORDINATES</button>
                 </div>
-                {deliveryFee === 0 && (
-                  <div className="text-[#C5A059] text-xs">✓ Free delivery on orders above ₦100,000</div>
-                )}
-              </div>
+              </motion.div>
+            )}
 
-              <div className="flex justify-between items-center pt-4 border-t border-white/10">
-                <span className="text-white/50 uppercase tracking-[0.2em] text-xs">Total</span>
-                <span className="text-white font-serif text-3xl">₦{grandTotal.toLocaleString()}</span>
+            {/* STEP 3 — Handshake / OPay */}
+            {step === 3 && (
+              <motion.div key="s3" initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -20 }} className="space-y-12">
+                <div className="luxury-card p-12 space-y-12 text-center">
+                  <div className="flex items-center justify-center gap-3 text-daraja-gold mono-text text-[10px]">
+                    <ShieldCheck className="w-4 h-4" /> <span>HANDSHAKE_PROTOCOL</span>
+                  </div>
+                  <div className="space-y-4">
+                    <p className="text-daraja-text-muted mono-text text-[9px] uppercase">Transaction_Reference</p>
+                    <p className="font-mono text-daraja-gold text-sm tracking-widest">{formData.encryptionKey}</p>
+                  </div>
+                  <div className="border-t border-daraja-border pt-8 space-y-4">
+                    <div className="flex justify-between mono-text text-[10px] text-daraja-text-muted">
+                      <span>SUBTOTAL</span>
+                      <span className="text-white">₦{subtotal.toLocaleString()}</span>
+                    </div>
+                    <div className="flex justify-between mono-text text-[10px] text-daraja-text-muted">
+                      <span>TAX (7.5%)</span>
+                      <span className="text-white">₦{Math.round(tax).toLocaleString()}</span>
+                    </div>
+                    <div className="flex justify-between mono-text text-[11px] border-t border-daraja-border pt-4">
+                      <span className="text-white font-bold">TOTAL</span>
+                      <span className="text-daraja-gold font-bold">₦{Math.round(total).toLocaleString()}</span>
+                    </div>
+                  </div>
+                  {/* OPay badge */}
+                  <div className="flex items-center justify-center gap-3 py-4 border border-daraja-border">
+                    <CreditCard className="w-5 h-5 text-daraja-gold" />
+                    <span className="mono-text text-[9px] text-white/60 uppercase tracking-widest">Secured by OPay Payment Gateway</span>
+                  </div>
+                </div>
+                <div className="flex gap-4">
+                  <button onClick={() => setStep(2)} className="flex-1 py-8 border border-daraja-border text-white mono-text text-[10px] hover:bg-white/5">BACK</button>
+                  <button
+                    onClick={handleFinalize}
+                    disabled={isProcessing}
+                    className="flex-[2] py-8 bg-daraja-gold text-daraja-charcoal font-black mono-text text-[10px] hover:bg-white transition-all disabled:opacity-50 flex items-center justify-center gap-3"
+                  >
+                    {isProcessing ? 'INITIALIZING_OPAY...' : 'RATIFY_ACQUISITION'}
+                    <ArrowRight className="w-4 h-4" />
+                  </button>
+                </div>
+              </motion.div>
+            )}
+          </AnimatePresence>
+        </div>
+
+        {/* ── RIGHT: ORDER SUMMARY (38%) ────────────────── */}
+        <div className="lg:col-span-4 space-y-8">
+          <div className="luxury-card p-10 space-y-8 sticky top-32">
+            <div className="flex items-center gap-3 text-daraja-gold mono-text text-[10px]">
+              <ShoppingBag className="w-4 h-4" /> <span>ACQUISITION_MANIFEST</span>
+            </div>
+            <div className="space-y-6 max-h-[320px] overflow-y-auto scrollbar-thin pr-2">
+              {cartItems.map((item, i) => (
+                <div key={i} className="flex gap-4 items-center">
+                  <div className="w-16 h-20 flex-shrink-0 overflow-hidden">
+                    <img
+                      src={item.image || item.images?.[0] || "https://i.imgur.com/7QFYTZJ.png"}
+                      alt={item.name}
+                      className="w-full h-full object-cover"
+                      referrerPolicy="no-referrer"
+                    />
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <p className="font-serif italic text-white text-sm truncate">{item.name}</p>
+                    <p className="mono-text text-[9px] text-daraja-text-muted mt-1">QTY: {item.qty || 1}</p>
+                    <p className="mono-text text-daraja-gold text-[10px] mt-1">₦{((item.price || 0) * (item.qty || 1)).toLocaleString()}</p>
+                  </div>
+                </div>
+              ))}
+              {cartItems.length === 0 && (
+                <p className="text-daraja-text-muted mono-text text-[10px] text-center py-8">CART_EMPTY</p>
+              )}
+            </div>
+            <div className="border-t border-daraja-border pt-8 space-y-3">
+              <div className="flex justify-between mono-text text-[10px] text-daraja-text-muted">
+                <span>SUBTOTAL</span><span className="text-white">₦{subtotal.toLocaleString()}</span>
               </div>
+              <div className="flex justify-between mono-text text-[10px] text-daraja-text-muted">
+                <span>TAX</span><span className="text-white">₦{Math.round(tax).toLocaleString()}</span>
+              </div>
+              <div className="flex justify-between mono-text text-[11px] border-t border-daraja-border pt-3">
+                <span className="text-white font-bold">TOTAL</span>
+                <span className="text-daraja-gold font-bold text-lg">₦{Math.round(total).toLocaleString()}</span>
+              </div>
+            </div>
+            <div className="flex items-center gap-3 text-daraja-text-muted mono-text text-[9px]">
+              <Truck className="w-4 h-4" /> FREE_SOVEREIGN_DELIVERY ON ORDERS OVER ₦50K
+            </div>
+            <div className="flex items-center gap-3 text-daraja-text-muted mono-text text-[9px]">
+              <ShieldCheck className="w-4 h-4 text-daraja-gold" />
+              <span>256-BIT_ENCRYPTED — OPAY_SECURED</span>
             </div>
           </div>
         </div>
       </div>
-    </div>
+    </motion.div>
   );
 }

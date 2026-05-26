@@ -1,293 +1,416 @@
 import React, { useState, useEffect } from 'react';
+import { motion, AnimatePresence } from 'motion/react';
+import { ArrowRight, ChevronRight, ChevronLeft, TrendingUp, Sparkles, Star, Gavel, Clock } from 'lucide-react';
 import { Link } from 'react-router-dom';
-import { Product, Drop, HeritagePost } from '../api/entities';
-import { createPageUrl } from '../utils';
+import { Product } from '../api/entities';
 
-const heroSlides = [
-  {
-    image: 'https://images.unsplash.com/photo-1469334031218-e382a71b716b?w=1600&q=90',
-    title: 'Sovereign Heritage',
-    subtitle: 'Wear Your Worth',
-    cta: 'Explore Heritage',
-    link: '/shop?category=Heritage',
-  },
-  {
-    image: 'https://images.unsplash.com/photo-1590735213920-68192a487bc2?w=1600&q=90',
-    title: 'HD Heritage Collection',
-    subtitle: 'Where tradition becomes sovereign',
-    cta: 'Shop Now',
-    link: '/shop',
-  },
-  {
-    image: 'https://images.unsplash.com/photo-1551537482-f2075a1d41f2?w=1600&q=90',
-    title: 'Urban Sovereignty',
-    subtitle: 'African streetwear, redefined',
-    cta: 'Explore Streetwear',
-    link: '/shop?category=Streetwear',
-  },
+const DEFAULT_HERO_IMAGES = [
+  "https://i.imgur.com/7QFYTZJ.png",
+  "https://i.imgur.com/MA123T4.png",
+  "https://i.imgur.com/S4l7lKP.png",
+  "https://i.imgur.com/jNv9WE7.png",
+  "https://i.imgur.com/2Xkwv9Y.png"
+];
+
+const TAGLINES = [
+  "Wear Your Worth",
+  "Sovereign Heritage",
+  "Neural Link Active"
 ];
 
 export default function Home() {
   const [currentSlide, setCurrentSlide] = useState(0);
-  const [featuredProducts, setFeaturedProducts] = useState([]);
-  const [liveDrop, setLiveDrop] = useState(null);
-  const [heritagePosts, setHeritagePosts] = useState([]);
-  const [dropTimeLeft, setDropTimeLeft] = useState({ h: 0, m: 0, s: 0 });
+  const [heroImages] = useState(DEFAULT_HERO_IMAGES);
+  const [latestProducts, setLatestProducts] = useState([]);
+  const [trendingProducts, setTrendingProducts] = useState([]);
+  const [topRatedProducts, setTopRatedProducts] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [email, setEmail] = useState('');
+  const [taglineIdx, setTaglineIdx] = useState(0);
 
   useEffect(() => {
-    Product.filter({ is_featured: true }).then(p => setFeaturedProducts(p.slice(0, 6)));
-    Drop.filter({ status: 'live' }).then(d => { if (d[0]) setLiveDrop(d[0]); });
-    HeritagePost.filter({ is_published: true }).then(p => setHeritagePosts(p.slice(0, 3)));
+    Product.list('-created_date', 12)
+      .then(products => {
+        setLatestProducts(products.slice(0, 4));
+        setTrendingProducts(products.filter(p => p.is_featured).slice(0, 4));
+        setTopRatedProducts([...products].sort((a, b) => (b.rating || 0) - (a.rating || 0)).slice(0, 4));
+      })
+      .catch(console.error)
+      .finally(() => setLoading(false));
   }, []);
 
+  // Hero auto-advance
   useEffect(() => {
-    const timer = setInterval(() => {
-      setCurrentSlide(s => (s + 1) % heroSlides.length);
-    }, 5000);
-    return () => clearInterval(timer);
-  }, []);
-
-  useEffect(() => {
-    if (!liveDrop?.end_time) return;
-    const tick = () => {
-      const diff = new Date(liveDrop.end_time) - Date.now();
-      if (diff <= 0) { setDropTimeLeft({ h: 0, m: 0, s: 0 }); return; }
-      const h = Math.floor(diff / 3600000);
-      const m = Math.floor((diff % 3600000) / 60000);
-      const s = Math.floor((diff % 60000) / 1000);
-      setDropTimeLeft({ h, m, s });
-    };
-    tick();
-    const t = setInterval(tick, 1000);
+    const t = setInterval(() => setCurrentSlide(p => (p + 1) % heroImages.length), 8000);
     return () => clearInterval(t);
-  }, [liveDrop]);
+  }, [heroImages.length]);
 
-  const slide = heroSlides[currentSlide];
+  // Tagline cycle
+  useEffect(() => {
+    const t = setInterval(() => setTaglineIdx(p => (p + 1) % TAGLINES.length), 4000);
+    return () => clearInterval(t);
+  }, []);
+
+  const nextSlide = () => setCurrentSlide(p => (p + 1) % heroImages.length);
+  const prevSlide = () => setCurrentSlide(p => (p - 1 + heroImages.length) % heroImages.length);
+
+  const handleSubscribe = (e) => {
+    e.preventDefault();
+    if (!email.trim()) return;
+    alert('Identity Locked — You have been registered in the archive distribution ledger.');
+    setEmail('');
+  };
 
   return (
-    <div className="min-h-screen bg-[#050505]">
-      {/* HERO — 38% viewport */}
-      <section className="relative h-[62vh] overflow-hidden">
-        <div
-          className="absolute inset-0 bg-cover bg-center transition-all duration-1000"
-          style={{ backgroundImage: `url(${slide.image})` }}
-        />
-        <div className="absolute inset-0 bg-gradient-to-b from-black/30 via-black/40 to-[#050505]" />
-        <div className="relative h-full flex flex-col justify-end pb-12 px-6 md:px-16 max-w-7xl mx-auto">
-          <div className="max-w-2xl">
-            <div className="flex items-center gap-2 mb-4">
-              <div className="w-8 h-px bg-[#C5A059]" />
-              <span className="text-[#C5A059] text-xs uppercase tracking-[0.3em] font-medium">New Collection</span>
-            </div>
-            <h1 className="text-5xl md:text-7xl font-serif text-white font-light leading-tight mb-4">
-              {slide.title}
+    <motion.div
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      className="flex flex-col min-h-screen pb-32 md:pb-0 overflow-hidden bg-daraja-charcoal"
+    >
+      {/* ── HERO SECTION ───────────────────────────────────── */}
+      <section className="relative h-[90vh] flex flex-col justify-end p-8 overflow-hidden group">
+        <AnimatePresence mode="wait">
+          <motion.div
+            key={currentSlide}
+            initial={{ opacity: 0, scale: 1.08 }}
+            animate={{ opacity: 1, scale: 1 }}
+            exit={{ opacity: 0, scale: 0.95 }}
+            transition={{ duration: 2, ease: "easeInOut" }}
+            className="absolute inset-0"
+          >
+            <img
+              src={heroImages[currentSlide]}
+              alt={`Heritage Slide ${currentSlide + 1}`}
+              className="w-full h-full object-cover object-center brightness-75"
+              referrerPolicy="no-referrer"
+              loading="eager"
+            />
+            <div className="absolute inset-0 bg-gradient-to-t from-[#050505] via-[#050505]/20 to-transparent" />
+          </motion.div>
+        </AnimatePresence>
+
+        {/* Prev/Next Arrows */}
+        <button
+          onClick={prevSlide}
+          className="absolute left-6 top-1/2 -translate-y-1/2 z-20 p-3 glass border border-white/10 text-white hover:border-[#C5A059] hover:text-[#C5A059] transition-all opacity-0 group-hover:opacity-100"
+        >
+          <ChevronLeft className="w-5 h-5" />
+        </button>
+        <button
+          onClick={nextSlide}
+          className="absolute right-6 top-1/2 -translate-y-1/2 z-20 p-3 glass border border-white/10 text-white hover:border-[#C5A059] hover:text-[#C5A059] transition-all opacity-0 group-hover:opacity-100"
+        >
+          <ChevronRight className="w-5 h-5" />
+        </button>
+
+        {/* Hero Copy */}
+        <div className="relative z-10 max-w-5xl mb-12">
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.5 }}
+            className="flex items-center gap-4 mb-10"
+          >
+            <div className="w-10 h-[1.5px] bg-[#C5A059]" />
+            <span className="mono-text text-[#C5A059]/80 text-[9px]">HERITAGE ARCHIVE V2.3</span>
+          </motion.div>
+
+          <motion.div
+            initial={{ opacity: 0, scale: 0.9 }}
+            animate={{ opacity: 1, scale: 1 }}
+            transition={{ delay: 0.8, duration: 1 }}
+            className="relative"
+          >
+            {/* Ghost watermark */}
+            <h2 className="text-[12vw] md:text-[10rem] font-serif font-black text-white leading-[0.8] tracking-tighter uppercase mix-blend-overlay opacity-30 absolute -top-12 -left-4 pointer-events-none whitespace-nowrap">
+              DAR<span className="italic">AJA</span>
+            </h2>
+            <h1 className="text-6xl md:text-[9rem] font-serif italic text-white leading-[1] relative z-10">
+              <span className="text-[#C5A059] not-italic font-bold">HD</span> Heritage <br />
+              <span className="ml-12 md:ml-24">Collection</span>
             </h1>
-            <p className="text-white/60 text-lg mb-8 font-light tracking-wide">{slide.subtitle}</p>
+          </motion.div>
+
+          {/* Rotating tagline */}
+          <motion.div
+            key={taglineIdx}
+            initial={{ opacity: 0, y: 8 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 0.8 }}
+            className="mt-8 flex items-center gap-4"
+          >
+            <span className="text-[#C5A059]/60 mono-text text-[10px] uppercase tracking-[0.6em]">{TAGLINES[taglineIdx]}</span>
+          </motion.div>
+
+          <div className="flex gap-4 mt-10">
             <Link
-              to={slide.link}
-              className="inline-flex items-center gap-3 bg-[#C5A059] text-black px-8 py-4 text-sm uppercase tracking-[0.2em] font-semibold hover:bg-white transition-colors"
+              to="/shop"
+              className="px-10 py-5 bg-[#C5A059] text-black font-bold mono-text text-[10px] uppercase tracking-[0.5em] hover:bg-white transition-all flex items-center gap-3"
             >
-              {slide.cta}
-              <span>→</span>
+              ENTER_ARCHIVE <ArrowRight className="w-4 h-4" />
+            </Link>
+            <Link
+              to="/drops"
+              className="px-10 py-5 border border-white/20 text-white mono-text text-[10px] uppercase tracking-[0.5em] hover:border-[#C5A059] hover:text-[#C5A059] transition-all flex items-center gap-3"
+            >
+              LIVE_DROPS
             </Link>
           </div>
         </div>
+
         {/* Slide indicators */}
-        <div className="absolute bottom-6 right-16 flex gap-2">
-          {heroSlides.map((_, i) => (
+        <div className="absolute bottom-16 right-12 flex gap-4 z-20">
+          {heroImages.map((_, i) => (
             <button
               key={i}
               onClick={() => setCurrentSlide(i)}
-              className={`h-px transition-all ${i === currentSlide ? 'w-8 bg-[#C5A059]' : 'w-4 bg-white/30'}`}
+              className={`h-[2px] transition-all duration-1000 ${
+                currentSlide === i
+                  ? 'w-16 bg-[#C5A059] shadow-[0_0_15px_rgba(197,160,89,0.5)]'
+                  : 'w-6 bg-white/10'
+              }`}
             />
           ))}
         </div>
       </section>
 
-      {/* LIVE DROP BANNER */}
-      {liveDrop && (
-        <section className="bg-[#C5A059]/10 border-y border-[#C5A059]/20 py-4 px-6">
-          <div className="max-w-7xl mx-auto flex items-center justify-between flex-wrap gap-4">
-            <div className="flex items-center gap-4">
-              <div className="w-2 h-2 rounded-full bg-[#C5A059] animate-pulse" />
-              <span className="text-[#C5A059] text-xs uppercase tracking-[0.3em]">Live Drop</span>
-              <span className="text-white font-serif text-lg">{liveDrop.name}</span>
+      {/* ── SOVEREIGN MARKET TICKER ──────────────────────── */}
+      <div className="bg-[#C5A059] h-12 overflow-hidden flex whitespace-nowrap items-center border-y border-black/20">
+        <div className="flex gap-24 items-center animate-ticker min-w-[200%]">
+          {[...Array(12)].map((_, i) => (
+            <div key={i} className="flex gap-24 items-center flex-shrink-0">
+              <span className="flex items-center gap-4 text-black font-bold uppercase text-[9px] tracking-[0.5em]">
+                <TrendingUp className="w-3 h-3" /> VOL: 1.2M
+              </span>
+              <span className="flex items-center gap-4 text-black font-bold uppercase text-[9px] tracking-[0.5em]">
+                <Sparkles className="w-3 h-3" /> NODES: 8.4k
+              </span>
+              <span className="flex items-center gap-4 text-black font-bold uppercase text-[9px] tracking-[0.5em]">
+                <Clock className="w-3 h-3" /> SYNC: ACTIVE
+              </span>
+              <span className="text-black/30">•</span>
             </div>
-            <div className="flex items-center gap-6">
-              <div className="flex gap-3 text-white">
-                {[
-                  { v: dropTimeLeft.h, l: 'H' },
-                  { v: dropTimeLeft.m, l: 'M' },
-                  { v: dropTimeLeft.s, l: 'S' },
-                ].map(({ v, l }) => (
-                  <div key={l} className="text-center">
-                    <div className="text-2xl font-mono font-bold text-[#C5A059]">
-                      {String(v).padStart(2, '0')}
-                    </div>
-                    <div className="text-[10px] text-white/40 uppercase">{l}</div>
-                  </div>
-                ))}
-              </div>
-              <Link
-                to="/drops"
-                className="bg-[#C5A059] text-black px-6 py-2 text-xs uppercase tracking-[0.2em] font-bold hover:bg-white transition-colors"
-              >
-                Join Drop
-              </Link>
-            </div>
-          </div>
-        </section>
-      )}
+          ))}
+        </div>
+      </div>
 
-      {/* FEATURED PRODUCTS — 62% focus */}
-      <section className="py-20 px-6 md:px-16 max-w-7xl mx-auto">
-        <div className="flex items-center justify-between mb-12">
+      {/* ── LATEST PRODUCTS (62% focus) ──────────────────── */}
+      <section className="px-6 md:px-12 py-24">
+        <div className="flex justify-between items-end mb-16">
           <div>
-            <div className="flex items-center gap-3 mb-3">
-              <div className="w-6 h-px bg-[#C5A059]" />
-              <span className="text-[#C5A059] text-xs uppercase tracking-[0.3em]">Latest Arrivals</span>
+            <div className="flex items-center gap-3 mb-4">
+              <div className="w-6 h-[1px] bg-[#C5A059]" />
+              <span className="mono-text text-[#C5A059] text-[9px] uppercase tracking-[0.5em]">LATEST_ARCHIVE</span>
             </div>
-            <h2 className="text-3xl md:text-5xl font-serif text-white font-light">The Collection</h2>
+            <h2 className="text-4xl md:text-6xl font-serif italic text-white">New <span className="text-[#C5A059] not-italic">Acquisitions</span></h2>
           </div>
-          <Link to="/shop" className="text-[#C5A059] text-sm uppercase tracking-[0.2em] hover:text-white transition-colors flex items-center gap-2">
-            View All <span>→</span>
+          <Link to="/shop" className="hidden md:flex items-center gap-2 mono-text text-[10px] text-white/40 hover:text-[#C5A059] transition-colors">
+            VIEW_ALL <ArrowRight className="w-3 h-3" />
           </Link>
         </div>
 
-        {/* Golden ratio grid: 1 large (62%) + 2 smaller (38%) + rest */}
-        {featuredProducts.length > 0 && (
-          <div className="grid grid-cols-1 md:grid-cols-5 gap-px bg-white/5">
-            {/* Large featured */}
-            <div className="md:col-span-3 bg-[#050505]">
-              <ProductCard product={featuredProducts[0]} large />
-            </div>
-            {/* Two stacked */}
-            <div className="md:col-span-2 flex flex-col gap-px bg-white/5">
-              {featuredProducts.slice(1, 3).map(p => (
-                <div key={p.id} className="bg-[#050505]">
-                  <ProductCard product={p} />
-                </div>
-              ))}
-            </div>
+        {loading ? (
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-6">
+            {[...Array(4)].map((_, i) => (
+              <div key={i} className="luxury-card aspect-[3/4] animate-pulse" />
+            ))}
           </div>
-        )}
-
-        {/* Remaining products in grid */}
-        {featuredProducts.length > 3 && (
-          <div className="grid grid-cols-2 md:grid-cols-3 gap-px bg-white/5 mt-px">
-            {featuredProducts.slice(3).map(p => (
-              <div key={p.id} className="bg-[#050505]">
-                <ProductCard product={p} />
-              </div>
+        ) : (
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-6">
+            {(latestProducts.length > 0 ? latestProducts : [...Array(4)].map((_, i) => ({
+              id: i, name: `Heritage Piece ${i + 1}`, price: 45000 + i * 10000,
+              images: ["https://i.imgur.com/7QFYTZJ.png"], category: "Heritage"
+            }))).map((product, i) => (
+              <ProductCard key={product.id || i} product={product} index={i} />
             ))}
           </div>
         )}
       </section>
 
-      {/* CATEGORIES */}
-      <section className="py-16 px-6 md:px-16 max-w-7xl mx-auto border-t border-white/5">
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-          {[
-            { name: 'Heritage', img: 'https://images.unsplash.com/photo-1590735213920-68192a487bc2?w=600', desc: 'Sahelian tradition' },
-            { name: 'Streetwear', img: 'https://images.unsplash.com/photo-1551537482-f2075a1d41f2?w=600', desc: 'Urban sovereignty' },
-            { name: 'Atelier', img: 'https://images.unsplash.com/photo-1558618666-fcd25c85cd64?w=600', desc: 'Bespoke tailoring' },
-            { name: 'Accessories', img: 'https://images.unsplash.com/photo-1548036328-c9fa89d128fa?w=600', desc: 'Artisan craft' },
-          ].map(cat => (
-            <Link
-              key={cat.name}
-              to={`/shop?category=${cat.name}`}
-              className="group relative aspect-[3/4] overflow-hidden"
-            >
-              <img src={cat.img} alt={cat.name} className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-105" />
-              <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/20 to-transparent" />
-              <div className="absolute bottom-0 left-0 p-6">
-                <div className="text-[#C5A059] text-xs uppercase tracking-[0.3em] mb-1">{cat.desc}</div>
-                <div className="text-white font-serif text-2xl">{cat.name}</div>
-              </div>
-            </Link>
-          ))}
+      {/* ── GOLDEN GRID: FEATURED (1 large + 2 small) ───── */}
+      <section className="px-6 md:px-12 py-24 bg-[#0E0E0E]">
+        <div className="flex items-center gap-4 mb-16">
+          <div className="w-6 h-[1px] bg-[#C5A059]" />
+          <span className="mono-text text-[#C5A059] text-[9px] uppercase tracking-[0.5em]">EDITORIAL_SELECTION</span>
+        </div>
+        <div className="grid grid-cols-1 md:grid-cols-12 gap-6">
+          {/* 62% large card */}
+          <motion.div
+            initial={{ opacity: 0, y: 30 }}
+            whileInView={{ opacity: 1, y: 0 }}
+            viewport={{ once: true }}
+            className="md:col-span-7 luxury-card overflow-hidden group cursor-pointer relative"
+          >
+            <div className="aspect-[4/5] overflow-hidden">
+              <img
+                src="https://i.imgur.com/S4l7lKP.png"
+                alt="Featured"
+                className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-[10s]"
+                referrerPolicy="no-referrer"
+              />
+              <div className="absolute inset-0 bg-gradient-to-t from-black/80 to-transparent" />
+            </div>
+            <div className="absolute bottom-0 left-0 right-0 p-10">
+              <span className="mono-text text-[#C5A059] text-[9px] uppercase tracking-widest">Featured_Drop</span>
+              <h3 className="text-3xl font-serif italic text-white mt-2">Ancestral Sahelian Kaftan</h3>
+              <p className="text-white/60 mono-text text-[10px] mt-2">₦85,000 · Heritage Series</p>
+            </div>
+          </motion.div>
+
+          {/* 38% two stacked */}
+          <div className="md:col-span-5 grid grid-rows-2 gap-6">
+            {[
+              { img: "https://i.imgur.com/jNv9WE7.png", name: "Nomadic Silhouette Vest", price: "₦62,000" },
+              { img: "https://i.imgur.com/2Xkwv9Y.png", name: "Ethereal Silk Sequence", price: "₦120,000" }
+            ].map((item, i) => (
+              <motion.div
+                key={i}
+                initial={{ opacity: 0, x: 30 }}
+                whileInView={{ opacity: 1, x: 0 }}
+                viewport={{ once: true }}
+                transition={{ delay: i * 0.1 }}
+                className="luxury-card overflow-hidden group cursor-pointer relative"
+              >
+                <div className="aspect-[16/9] overflow-hidden">
+                  <img
+                    src={item.img}
+                    alt={item.name}
+                    className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-[8s]"
+                    referrerPolicy="no-referrer"
+                  />
+                  <div className="absolute inset-0 bg-gradient-to-t from-black/70 to-transparent" />
+                </div>
+                <div className="absolute bottom-0 left-0 right-0 p-6">
+                  <h4 className="text-lg font-serif italic text-white">{item.name}</h4>
+                  <p className="text-[#C5A059] mono-text text-[9px] mt-1">{item.price}</p>
+                </div>
+              </motion.div>
+            ))}
+          </div>
         </div>
       </section>
 
-      {/* HERITAGE STORIES */}
-      {heritagePosts.length > 0 && (
-        <section className="py-20 px-6 md:px-16 max-w-7xl mx-auto border-t border-white/5">
-          <div className="flex items-center justify-between mb-12">
-            <div>
-              <div className="flex items-center gap-3 mb-3">
-                <div className="w-6 h-px bg-[#C5A059]" />
-                <span className="text-[#C5A059] text-xs uppercase tracking-[0.3em]">Style Stories</span>
-              </div>
-              <h2 className="text-3xl md:text-4xl font-serif text-white font-light">The Archive</h2>
-            </div>
-            <Link to="/heritage" className="text-[#C5A059] text-sm uppercase tracking-[0.2em] hover:text-white transition-colors flex items-center gap-2">
-              Full Archive <span>→</span>
-            </Link>
+      {/* ── TRENDING ─────────────────────────────────────── */}
+      {trendingProducts.length > 0 && (
+        <section className="px-6 md:px-12 py-24">
+          <div className="flex items-center gap-4 mb-16">
+            <div className="w-6 h-[1px] bg-[#C5A059]" />
+            <span className="mono-text text-[#C5A059] text-[9px] uppercase tracking-[0.5em]">TRENDING_NODES</span>
           </div>
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
-            {heritagePosts.map(post => (
-              <Link key={post.id} to="/heritage" className="group">
-                <div className="aspect-[16/10] overflow-hidden mb-4">
-                  <img src={post.image_url} alt={post.title} className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-105" />
-                </div>
-                <div className="text-[#C5A059] text-xs uppercase tracking-[0.3em] mb-2">{post.category}</div>
-                <h3 className="text-white font-serif text-xl leading-tight group-hover:text-[#C5A059] transition-colors">{post.title}</h3>
-              </Link>
-            ))}
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-6">
+            {trendingProducts.map((p, i) => <ProductCard key={p.id || i} product={p} index={i} />)}
           </div>
         </section>
       )}
 
-      {/* BRAND MANIFESTO */}
-      <section className="py-24 bg-[#0E0E0E] border-t border-white/5">
-        <div className="max-w-3xl mx-auto text-center px-6">
-          <div className="text-[#C5A059] text-xs uppercase tracking-[0.4em] mb-8">The Daraja Manifesto</div>
-          <blockquote className="text-white font-serif text-3xl md:text-5xl font-light leading-relaxed mb-8">
-            "We do not design clothes.<br />We architect sovereignty."
-          </blockquote>
-          <p className="text-white/40 leading-relaxed">
-            House of Daraja bridges the sacred heritage of the Sahel with the living pulse of modern Africa.
-            Every thread is a decision. Every pattern is a declaration.
-            Wear your worth.
+      {/* ── LIVE DROP TEASER ─────────────────────────────── */}
+      <section className="px-6 md:px-12 py-32 relative overflow-hidden">
+        <div className="absolute inset-0">
+          <img src="https://i.imgur.com/MA123T4.png" alt="" className="w-full h-full object-cover brightness-20 opacity-30" referrerPolicy="no-referrer" />
+          <div className="absolute inset-0 bg-gradient-to-b from-[#050505] via-transparent to-[#050505]" />
+        </div>
+        <div className="relative z-10 max-w-2xl mx-auto text-center space-y-8">
+          <div className="flex items-center justify-center gap-4 text-[#C5A059] mono-text">
+            <span className="w-8 h-[1px] bg-[#C5A059]/40" />
+            <span className="animate-pulse flex items-center gap-2 font-bold tracking-[0.5em] text-[10px]">
+              ✦ LIMITED DROP — DROPS PAGE ✦
+            </span>
+            <span className="w-8 h-[1px] bg-[#C5A059]/40" />
+          </div>
+          <h2 className="text-5xl md:text-7xl font-serif italic text-white">Sovereign <span className="text-[#C5A059] not-italic">Drops</span></h2>
+          <p className="text-white/50 font-serif italic text-lg leading-relaxed">
+            Exclusive, time-limited releases from the Heritage Archive. Each drop is a singular moment.
           </p>
+          <Link
+            to="/drops"
+            className="inline-flex items-center gap-3 px-12 py-6 bg-[#C5A059] text-black font-black mono-text text-[10px] uppercase tracking-[0.5em] hover:bg-white transition-all"
+          >
+            ACCESS_DROPS <ArrowRight className="w-4 h-4" />
+          </Link>
         </div>
       </section>
-    </div>
+
+      {/* ── TOP RATED ────────────────────────────────────── */}
+      {topRatedProducts.length > 0 && (
+        <section className="px-6 md:px-12 py-24 bg-[#0E0E0E]">
+          <div className="flex items-center gap-4 mb-16">
+            <div className="w-6 h-[1px] bg-[#C5A059]" />
+            <span className="mono-text text-[#C5A059] text-[9px] uppercase tracking-[0.5em]">CURATOR_PICKS</span>
+            <Star className="w-3 h-3 text-[#C5A059]" />
+          </div>
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-6">
+            {topRatedProducts.map((p, i) => <ProductCard key={p.id || i} product={p} index={i} />)}
+          </div>
+        </section>
+      )}
+
+      {/* ── EMAIL SUBSCRIPTION ───────────────────────────── */}
+      <section className="px-6 md:px-12 py-32 border-t border-white/5">
+        <div className="max-w-xl mx-auto text-center space-y-8">
+          <div className="flex items-center justify-center gap-3 text-[#C5A059] mono-text text-[9px] uppercase tracking-widest">
+            <Sparkles className="w-3 h-3" />
+            ARCHIVE_DISTRIBUTION_LEDGER
+          </div>
+          <h2 className="text-4xl md:text-5xl font-serif italic text-white">Register <span className="text-[#C5A059] not-italic">Your Identity</span></h2>
+          <p className="text-white/40 font-serif italic">Be the first to receive drops, heritage releases, and atelier access.</p>
+          <form onSubmit={handleSubscribe} className="flex gap-0">
+            <input
+              type="email"
+              value={email}
+              onChange={e => setEmail(e.target.value)}
+              placeholder="archive@daraja.io"
+              className="flex-1 bg-[#0E0E0E] border border-white/10 border-r-0 px-6 py-5 text-white font-mono text-sm focus:border-[#C5A059] outline-none"
+            />
+            <button
+              type="submit"
+              className="px-8 py-5 bg-[#C5A059] text-black font-black mono-text text-[9px] uppercase tracking-widest hover:bg-white transition-all flex items-center gap-2"
+            >
+              LOCK <ArrowRight className="w-3 h-3" />
+            </button>
+          </form>
+        </div>
+      </section>
+    </motion.div>
   );
 }
 
-function ProductCard({ product, large }) {
-  if (!product) return null;
+// ─── PRODUCT CARD COMPONENT ─────────────────────────────────
+function ProductCard({ product, index }) {
+  const img = Array.isArray(product.images) && product.images.length > 0
+    ? product.images[0]
+    : "https://i.imgur.com/7QFYTZJ.png";
+
   return (
-    <Link to={`/product/${product.id}`} className="group block relative overflow-hidden">
-      <div className={`relative overflow-hidden ${large ? 'aspect-[3/4]' : 'aspect-square'}`}>
-        <img
-          src={product.images?.[0] || 'https://images.unsplash.com/photo-1558618666-fcd25c85cd64?w=800'}
-          alt={product.name}
-          className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-105"
-        />
-        <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
-        {product.stock <= 3 && product.stock > 0 && (
-          <div className="absolute top-4 left-4 bg-[#C5A059] text-black text-[10px] uppercase tracking-[0.2em] px-3 py-1">
-            Only {product.stock} left
-          </div>
-        )}
-        {product.stock === 0 && (
-          <div className="absolute top-4 left-4 bg-white/10 backdrop-blur text-white text-[10px] uppercase tracking-[0.2em] px-3 py-1">
-            Sold Out
-          </div>
-        )}
-      </div>
-      <div className="p-4 bg-[#0E0E0E]">
-        <div className="text-[#C5A059] text-[10px] uppercase tracking-[0.3em] mb-1">{product.category}</div>
-        <h3 className="text-white font-serif text-lg leading-tight mb-2 group-hover:text-[#C5A059] transition-colors">{product.name}</h3>
-        <div className="flex items-center gap-3">
-          <span className="text-white font-light text-base">₦{product.price?.toLocaleString()}</span>
-          {product.original_price && (
-            <span className="text-white/30 text-sm line-through">₦{product.original_price?.toLocaleString()}</span>
+    <motion.div
+      initial={{ opacity: 0, y: 20 }}
+      whileInView={{ opacity: 1, y: 0 }}
+      viewport={{ once: true }}
+      transition={{ delay: index * 0.05 }}
+    >
+      <Link to={`/product/${product.id}`} className="luxury-card group block overflow-hidden hover:border-[#C5A059]/40 transition-all">
+        {/* Image — 62% */}
+        <div className="aspect-[3/4] overflow-hidden relative">
+          <img
+            src={img}
+            alt={product.name}
+            className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-700"
+            referrerPolicy="no-referrer"
+            loading="lazy"
+          />
+          {product.is_featured && (
+            <div className="absolute top-4 left-4 px-3 py-1 bg-[#C5A059] text-black mono-text text-[8px] uppercase tracking-widest">
+              FEATURED
+            </div>
           )}
         </div>
-      </div>
-    </Link>
+        {/* Info — 38% */}
+        <div className="p-5 space-y-2">
+          <p className="mono-text text-[#C5A059] text-[8px] uppercase tracking-widest">{product.category || 'Heritage'}</p>
+          <h3 className="font-serif italic text-white text-lg leading-tight line-clamp-2">{product.name}</h3>
+          <p className="mono-text text-white text-[11px]">₦{(product.price || 0).toLocaleString()}</p>
+        </div>
+      </Link>
+    </motion.div>
   );
 }

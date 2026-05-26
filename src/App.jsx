@@ -3,7 +3,8 @@ import { BrowserRouter as Router, Routes, Route, Link, useLocation, useNavigate 
 import {
   Home, Shop, ProductDetail, Marketplace, Drops, Heritage, Profile,
   Orders, Wishlist, Atelier, VendorDashboard, AdminDashboard,
-  Rewards, Wallet, Community, LiveAuction, SellerStudio
+  Rewards, Wallet, Community, LiveAuction, SellerStudio,
+  Governance, CmsDashboard, AtelierAdmin, InventoryManagement
 } from './pages/index';
 import Auth from './pages/Auth';
 import Checkout from './pages/Checkout';
@@ -514,6 +515,10 @@ function AppContent() {
           <Route path="/vendor" element={<VendorDashboard />} />
           <Route path="/seller-studio" element={<SellerStudio />} />
           <Route path="/admin" element={<AdminDashboard />} />
+          <Route path="/admin/atelier" element={<AtelierAdmin />} />
+          <Route path="/admin/inventory" element={<InventoryManagement />} />
+          <Route path="/cms" element={<CmsDashboard />} />
+          <Route path="/governance" element={<Governance />} />
           {/* Fallback */}
           <Route path="*" element={<Home />} />
         </Routes>
