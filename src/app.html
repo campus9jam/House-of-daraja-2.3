@@ -1,0 +1,86 @@
+<!doctype html>
+<html lang="%sveltekit.lang%" dir="%sveltekit.dir%">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <meta name="theme-color" content="#050505" media="(prefers-color-scheme: dark)" />
+    <meta name="theme-color" content="#050505" media="(prefers-color-scheme: light)" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <meta name="apple-mobile-web-app-title" content="House of Daraja" />
+    <meta name="mobile-web-app-capable" content="yes" />
+    <meta name="format-detection" content="telephone=no" />
+    <meta name="msapplication-TileColor" content="#050505" />
+    <meta name="msapplication-tap-highlight" content="no" />
+
+    <!-- SEO -->
+    <meta name="description" content="Luxury African cultural commerce — bespoke fashion, heritage, live auctions & artisan collections." />
+    <meta name="keywords" content="African fashion, luxury, Nigerian fashion, kaftan, agbada, bespoke tailoring, HD" />
+    <meta name="author" content="House of Daraja" />
+
+    <!-- Open Graph -->
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content="House of Daraja" />
+    <meta property="og:description" content="Luxury African cultural commerce — Wear Your Worth" />
+    <meta property="og:image" content="/hd-logo.png" />
+    <meta property="og:url" content="https://houseofdaaraja.com" />
+
+    <!-- Twitter / X -->
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content="House of Daraja" />
+    <meta name="twitter:description" content="Luxury African cultural commerce — Wear Your Worth" />
+    <meta name="twitter:image" content="/hd-logo.png" />
+
+    <!-- PWA icons -->
+    <link rel="icon" href="/hd-logo.png" />
+    <link rel="apple-touch-icon" href="/hd-logo.png" />
+    <link rel="apple-touch-icon" sizes="152x152" href="/hd-logo.png" />
+    <link rel="apple-touch-icon" sizes="167x167" href="/hd-logo.png" />
+    <link rel="apple-touch-icon" sizes="180x180" href="/hd-logo.png" />
+    <link rel="manifest" href="/manifest.json" />
+
+    <!-- iOS splash screens -->
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+
+    %sveltekit.head%
+
+    <!-- ── Service Worker Registration ───────────────────── -->
+    <script>
+      if ('serviceWorker' in navigator) {
+        window.addEventListener('load', function () {
+          navigator.serviceWorker
+            .register('/sw.js', { scope: '/' })
+            .then(function (reg) {
+              console.log('[HD PWA] Service Worker registered:', reg.scope);
+
+              // Listen for updates
+              reg.addEventListener('updatefound', function () {
+                const sw = reg.installing;
+                if (!sw) return;
+                sw.addEventListener('statechange', function () {
+                  if (sw.state === 'installed' && navigator.serviceWorker.controller) {
+                    // New version available — post message to app
+                    window.__hdSwUpdateReady = true;
+                    window.dispatchEvent(new CustomEvent('hd-sw-update'));
+                  }
+                });
+              });
+            })
+            .catch(function (err) {
+              console.warn('[HD PWA] Service Worker registration failed:', err);
+            });
+
+          // Listen for messages from SW
+          navigator.serviceWorker.addEventListener('message', function (e) {
+            if (e.data && e.data.type === 'HD_SYNC_FLUSH') {
+              window.dispatchEvent(new CustomEvent('hd-sync-flush'));
+            }
+          });
+        });
+      }
+    </script>
+  </head>
+  <body data-sveltekit-preload-data="hover" class="bg-[#050505]">
+    <div style="display: contents">%sveltekit.body%</div>
+  </body>
+</html>
