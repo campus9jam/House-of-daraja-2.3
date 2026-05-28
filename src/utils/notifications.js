@@ -60,8 +60,8 @@ export function showLocalNotification(title, body, options = {}) {
   if (!('Notification' in window) || Notification.permission !== 'granted') return;
   new Notification(title, {
     body,
-    icon: '/hd-icon-192.png',
-    badge: '/hd-badge-72.png',
+    icon: '/hd-logo.png',
+    badge: '/hd-logo.png',
     ...options,
   });
 }

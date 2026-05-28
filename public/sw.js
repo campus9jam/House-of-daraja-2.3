@@ -29,9 +29,9 @@ self.addEventListener('activate', (e) => {
 self.addEventListener('push', (e) => {
   const data = e.data ? e.data.json() : {};
   const options = {
-    body: data.body || 'House of Daraja has a new update for you.',
-    icon: '/hd-icon-192.png',
-    badge: '/hd-badge-72.png',
+  body: data.body || 'House of Daraja has a new update for you.',
+  icon: '/hd-logo.png',
+  badge: '/hd-logo.png',
     image: data.image || null,
     vibrate: [200, 100, 200],
     data: { url: data.url || '/' },
@@ -65,13 +65,25 @@ self.addEventListener('notificationclick', (e) => {
 // Fetch (network first, cache fallback)
 self.addEventListener('fetch', (e) => {
   if (e.request.method !== 'GET') return;
+
+  // Ignore non-http(s) schemes (chrome-extension:, data:, blob:, etc.)
+  let parsedUrl;
+  try {
+    parsedUrl = new URL(e.request.url);
+  } catch (err) {
+    return;
+  }
+  if (parsedUrl.protocol !== 'http:' && parsedUrl.protocol !== 'https:') return;
+
   if (e.request.url.includes('/api/') || e.request.url.includes('/functions/')) return;
 
   e.respondWith(
     fetch(e.request)
       .then(res => {
         const resClone = res.clone();
-        caches.open(CACHE_NAME).then(cache => cache.put(e.request, resClone));
+        caches.open(CACHE_NAME).then(cache => {
+          try { cache.put(e.request, resClone); } catch (err) { console.warn('[SW] cache.put skipped:', err); }
+        });
         return res;
       })
       .catch(() => caches.match(e.request))
